@@ -3,9 +3,72 @@
  */
 package jfilesyncer;
 
+import com.sun.net.httpserver.HttpServer;
+
+import java.awt.*;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Objects;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Logger;
+
 public class App {
 
-    public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
-    }
+  private static final Logger logger = Logger.getLogger(App.class.getName());
+
+  public static void main(String[] args) throws IOException {
+    new Thread(
+            () -> {
+              try {
+                var server = HttpServer.create(new InetSocketAddress(8080), 0);
+                server.createContext(
+                    "/get-code",
+                    httpExchange -> {
+                      logger.info(httpExchange.getRequestURI().toString());
+                      var requestparams = httpExchange.getRequestURI().getQuery();
+                      logger.info(requestparams);
+                      if (Objects.equals(httpExchange.getRequestMethod(), "GET")) {
+                        httpExchange.sendResponseHeaders(200, "Hello".length());
+                        httpExchange.getResponseBody().write("Hello".getBytes());
+                        try (var client = HttpClient.newHttpClient()) {
+                          var request =
+                              HttpRequest.newBuilder()
+                                  .uri(
+                                      new URI(
+                                          "https://oauth2.googleapis.com/token?"
+                                              + requestparams
+                                              + "&redirect_uri=http://localhost:8080/get-code&client_id=456804413549-o0ul05pih5rcltg627q956m4f1dcd9rd.apps.googleusercontent.com&client_secret=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&grant_type=authorization_code"))
+                                  .headers("content-type", "application/x-www-form-urlencoded")
+                                  .POST(HttpRequest.BodyPublishers.noBody())
+                                  .build();
+                          var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                          logger.info(String.valueOf(response.statusCode()));
+                          logger.info(response.body());
+                        } catch (URISyntaxException | InterruptedException e) {
+                          throw new RuntimeException(e);
+                        }
+                      } else {
+                          logger.info(String.valueOf(httpExchange.getResponseCode()));
+                          logger.info(String.valueOf(httpExchange.getRequestURI()));
+                          httpExchange.sendResponseHeaders(200, "Hello again".length());
+                          httpExchange.getResponseBody().write("Hello again".getBytes());
+                      }
+                    });
+                server.start();
+              } catch (IOException e) {
+                throw new RuntimeException(e);
+              }
+            })
+        .start();
+    var baseUri = "https://accounts.google.com/o/oauth2/auth";
+    var params =
+        "?client_id=456804413549-o0ul05pih5rcltg627q956m4f1dcd9rd.apps.googleusercontent.com&response_type=code&redirect_uri=http://localhost:8080/get-code&scope=https://www.googleapis.com/auth/drive.file";
+    var url = baseUri + params;
+    Desktop.getDesktop().browse(URI.create(url));
+  }
 }
