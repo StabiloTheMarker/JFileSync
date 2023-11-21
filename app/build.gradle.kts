@@ -17,8 +17,8 @@ repositories {
 }
 
 dependencies {
-    // This dependency is used by the application.
-    implementation("com.google.guava:guava:32.1.1-jre")
+    testImplementation("org.assertj:assertj-core:3.24.2")
+
 }
 
 testing {
