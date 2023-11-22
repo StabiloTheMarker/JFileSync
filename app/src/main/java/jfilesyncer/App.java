@@ -3,26 +3,25 @@
  */
 package jfilesyncer;
 
-import jfilesyncer.services.GDriveService;
-import jfilesyncer.services.GoogleOauth2Service;
-
-import java.io.IOException;
+import org.apache.commons.cli.*;
 import java.util.logging.Logger;
 
 public class App {
 
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
-  public static void main(String[] args) {
-    var serviceContainer = new ServiceContainer();
-    var gDriveService = serviceContainer.getgDriveService();
-    var files = gDriveService.getAllFiles();
-    logger.info("Got " + files.size() + " files");
-    files.forEach(
-        f -> {
-          logger.info("Got filename " + f.originalFilename());
-        });
+  public static void main(String[] args) throws ParseException {
+    var options = new Options();
+    var option = Option.builder().option("foo").argName("bar").hasArg().build();
+    var helpOption = new Option("help", "Prints the help");
+    options.addOption(option);
+    options.addOption(helpOption);
+    var parser = new DefaultParser();
+    var cmd = parser.parse(options, args);
+    if(cmd.hasOption(helpOption)) {
+      var helpFormatter = new HelpFormatter();
+      helpFormatter.printHelp("JFileSync", options);
+    }
+    System.out.println(cmd.getOptionValue(option.getOpt()));
   }
-
-  private static void init() {}
 }
