@@ -3,8 +3,6 @@ package jfilesyncer;
 import java.io.File;
 
 public class FileSyncProcess {
-
-
     private File source;
     private File destination;
 
