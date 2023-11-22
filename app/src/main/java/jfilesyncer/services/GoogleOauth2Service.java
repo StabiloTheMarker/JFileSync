@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import jfilesyncer.models.AccessToken;
+import jfilesyncer.util.HttpClientGetter;
 import jfilesyncer.util.UriBuilder;
 import jfilesyncer.util.UriQueryParamParser;
 
@@ -27,11 +28,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 public class GoogleOauth2Service {
 
+  private final CredentialsService credentialsService;
   private final String REDIRECT_URI = "redirect_uri";
   private final String CLIENT_ID = "client_id";
   private final String GRANT_TYPE = "grant_type";
@@ -39,10 +40,16 @@ public class GoogleOauth2Service {
 
   private final String RESPONSE_TYPE = "response_type";
   private final String SCOPE = "scope";
-  private final Logger logger = Logger.getLogger(GDriveService.class.getName());
+  private final Logger logger = Logger.getLogger(GoogleOauth2Service.class.getName());
   private final int PORT = 8080;
 
+  private boolean loadingCredentials = false;
+
   private AccessToken credentials = null;
+
+  public GoogleOauth2Service(CredentialsService credentialsService) {
+    this.credentialsService = credentialsService;
+  }
 
   public AccessToken getCredentials() {
     return credentials;
@@ -52,14 +59,18 @@ public class GoogleOauth2Service {
     return credentials != null;
   }
 
-  public void loadCredentials() throws IOException {
-    if (CredentialsService.credentialsExist()) {
-      credentials = CredentialsService.loadCredentials();
-      return;
+  public void loadCredentials() {
+    try {
+      if (credentialsService.credentialsExist()) {
+        credentials = credentialsService.loadCredentials();
+        return;
+      }
+      credentials = fetchAccessToken();
+      logger.info("Fetched new AccessToken");
+      credentialsService.saveCredentials(credentials);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
-    credentials = fetchAccessToken();
-    logger.info("Fetched new AccessToken");
-    CredentialsService.saveCredentials(credentials);
   }
 
   public AccessToken fetchAccessToken() {
@@ -85,7 +96,7 @@ public class GoogleOauth2Service {
             CLIENT_ID, "456804413549-o0ul05pih5rcltg627q956m4f1dcd9rd.apps.googleusercontent.com")
         .addParam(RESPONSE_TYPE, "code")
         .addParam(REDIRECT_URI, getRedirectUrl())
-        .addParam(SCOPE, "https://www.googleapis.com/auth/drive.file")
+            .addParam(SCOPE, "https://www.googleapis.com/auth/drive")
         .build();
   }
 
@@ -103,7 +114,6 @@ public class GoogleOauth2Service {
   private HttpRequest getAuthRequest(Map<String, String> requestParams) {
     return HttpRequest.newBuilder()
         .uri(getAuthUri(requestParams))
-        .headers("content-type", "application/x-www-form-urlencoded")
         .POST(HttpRequest.BodyPublishers.noBody())
         .build();
   }
@@ -142,7 +152,7 @@ public class GoogleOauth2Service {
     logger.info(String.format("Params are %s", requestParams.toString()));
     if (Objects.equals(httpExchange.getRequestMethod(), "GET")) {
       createRandomAnswer(httpExchange);
-      try (var client = HttpClient.newBuilder().sslContext(getTrustAllSSLContext()).build()) {
+      try (var client = HttpClientGetter.getHttpClientWithTrustAllContext()) {
         var request = getAuthRequest(requestParams);
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
         var accessTokenObj = getAccessTokenResponse(response);
@@ -156,32 +166,6 @@ public class GoogleOauth2Service {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-    }
-  }
-
-  private SSLContext getTrustAllSSLContext() {
-    TrustManager trustAllManager =
-        new X509TrustManager() {
-
-          @Override
-          public void checkClientTrusted(X509Certificate[] chain, String authType)
-              throws CertificateException {}
-
-          @Override
-          public void checkServerTrusted(X509Certificate[] chain, String authType)
-              throws CertificateException {}
-
-          @Override
-          public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[] {};
-          }
-        };
-    try {
-      var context = SSLContext.getInstance("TLS");
-      context.init(null, new TrustManager[] {trustAllManager}, new SecureRandom());
-      return context;
-    } catch (NoSuchAlgorithmException | KeyManagementException e) {
-      throw new RuntimeException(e);
     }
   }
 }

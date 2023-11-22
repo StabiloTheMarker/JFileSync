@@ -14,14 +14,14 @@ public class App {
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
   public static void main(String[] args) {
-    try {
-      var service = new GoogleOauth2Service();
-      service.loadCredentials();
-      logger.info("Result is " + String.valueOf(service.credentialsAvailable()));
-
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
+    var serviceContainer = new ServiceContainer();
+    var gDriveService = serviceContainer.getgDriveService();
+    var files = gDriveService.getAllFiles();
+    logger.info("Got " + files.size() + " files");
+    files.forEach(
+        f -> {
+          logger.info("Got filename " + f.originalFilename());
+        });
   }
 
   private static void init() {}
